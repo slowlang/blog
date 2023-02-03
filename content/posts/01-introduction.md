@@ -2,7 +2,6 @@
 title: "Introduction. Fibonacci compiled!"
 tags: []
 date: 2023-02-03T15:02:19+04:00
-draft: true
 ---
 
 Hello reader!
