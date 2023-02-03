@@ -1,0 +1,119 @@
+<!doctype html><html lang=en class=h-100><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=generator content="Hugo 0.110.0"><meta name=description content="Hello reader!
+I’m happy to see you here, and I hope you’ll find something for yourself here. This will be a series of posts about making a brand-new programming language and its compiler. I’ve been doing that for quite a while, so a few milestones have passed. But today, I want to share a new achievement.
+Today I managed to compile a function call. And not even that, but the function is recursive."><link rel=stylesheet href=https://slowlang.github.io/blog/css/bootstrap.min.css><title>Introduction. Fibonacci compiled! | Slow Progress Blog</title><style>.container{max-width:700px}#nav a{font-weight:700;color:inherit}#nav a.nav-link-active{background-color:#212529;color:#fff}#nav-border{border-bottom:1px solid #212529}#main{margin-top:1em;margin-bottom:4em}#home-jumbotron{background-color:inherit}#footer .container{padding:1em 0}#footer a{color:inherit;text-decoration:underline}.font-125{font-size:125%}.tag-btn{margin-bottom:.3em}pre{background-color:#f5f5f5;border:1px solid #ccc;border-radius:4px;padding:16px}pre code{padding:0;font-size:inherit;color:inherit;background-color:transparent;border-radius:0}code{padding:2px 4px;font-size:90%;color:#c7254e;background-color:#f9f2f4;border-radius:4px}img,iframe,embed,video,audio{max-width:100%}.card-img,.card-img-top,.card-img-bottom{width:initial}</style></head><body class="d-flex flex-column h-100"><div id=nav-border class=container><nav id=nav class="nav justify-content-center"><a class=nav-link href=/blog/><i data-feather></i> Home</a>
+<a class=nav-link href=/blog/posts/><i data-feather></i> Blog</a>
+<a class=nav-link href=/blog/tags/><i data-feather></i> Tags</a>
+<a class=nav-link href=https://github.com/slowlang/slow><i data-feather></i> Github</a>
+<a class=nav-link href=/blog/about/><i data-feather=smile></i> About</a>
+<a class=nav-link href=/blog/index.xml><i data-feather=rss></i> RSS</a></nav></div><div class=container><main id=main><h1>Introduction. Fibonacci compiled!</h1><p>Hello reader!</p><p>I’m happy to see you here, and I hope you’ll find something for yourself here.
+This will be a series of posts about making a brand-new programming language and its compiler.
+I’ve been doing that for quite a while, so a few milestones have passed.
+But today, I want to share a new achievement.</p><p>Today I managed to compile a function call.
+And not even that, but the function is recursive.</p><p>The test program is simple (in the repo)</p><pre tabindex=0><code>package main
+
+func main(a int) (r int) {
+    return fib(a)
+}
+
+func fib(n int) (r int) {
+    if n &lt;= 1 {
+        return n
+    }
+
+    return fib(n-1) + fib(n-2)
+}
+</code></pre><p>It looks like a Go code. It is not a coincidence.
+I’m coding the compiler in Go, and I use its stdlib parser instead of my own.
+My priority, for now, is the compiler backend (ir -> asm).
+The middle part (ast -> ir) goes next.
+And the frontend (text -> ast) is the last in the queue.</p><p>I’ve managed register allocation before. Which was a hard fight, but I’ll tell you about it next time.
+The algorithm assigns a limited set of registers to subexpressions calculated in the function.</p><p>So now I needed to deal with the fact the function call is an unusual expression.
+It requires fixed registers assigned to function arguments and their results.</p><p>After a few failed ideas I decided to reserve argument registers from assigning to any expression which is alive at the function call instruction.
+Now I could put arguments and take results from the callee. But that wasn’t the end.</p><p>The compiled program didn’t succeed on any input more than 1. The problem was that I passed arguments, but the callee function (the same one) was using the same registers.
+So we loose the intermediate results after called function returned.</p><p>I can&rsquo;t assign the registers and hope the same function called again will not corrupt them.
+That is where the Stack comes in. Each function down the recursion call needs its own personal storage.</p><p>I&rsquo;m using the most straightforward approach I imagined I could implement. The first eight registers are dedicated to arguments and returning values.
+And it wasn&rsquo;t obvious to me that I may not use them all during the function call since the callee function may call any other and corrupt the 5th argument register event if I passed only two arguments.
+So I reserved all of them in register allocation.</p><p>The rest of the registers are callee saved because I can do that only once in the function prolog and restore in the epilogue.
+After the register allocation step, before code generation, I find the highest used register and save all from the 8th to the highest to the stack.
+A similar process is done in the epilogue but in reverse.</p><p>Now the function works and makes me so much happy.</p><p>This is the assembler text my compiler generates.</p><pre tabindex=0><code>.global _fib
+.align 4
+_fib:
+	STP     FP, LR, [SP, #-16]!
+	MOV     FP, SP
+	STP     X8, X9, [SP, #-16]!
+
+	// reg 0  args 1  expr 7
+	MOV	X1, #1	// expr 9
+	CMP	X0, X1	// expr 10
+	B.LE	L.3
+	B	L.2.fix.3.1
+L.3:
+	B	L.1
+L.2.fix.3.1:
+	// permutate [[9 0]]
+	MOV	X9, X0
+	B	L.2
+L.2:
+	MOV	X0, #1		// expr 16
+	SUB	X0, X9, X0	// expr 17
+	BL	_fib		// func call  17 (X0) -&gt; 18 (X8)
+	MOV	X8, X0		// func res 0 fix
+	MOV	X0, #2		// expr 19
+	SUB	X0, X9, X0	// expr 20
+	BL	_fib		// func call  20 (X0) -&gt; 21 (X0)
+	ADD	X0, X8, X0	// expr 22
+	B	L.1
+L.1:
+	// reg 0  res 0  expr 24
+
+	LDP     X8, X9, [SP], #16
+	LDP     FP, LR, [SP], #16
+	RET
+</code></pre><p>Which I then compile by llvm assembler. And this is what the result looks like.</p><pre tabindex=0><code>0000000100003f60 &lt;_fib&gt;:
+100003f60: fd 7b bf a9 	stp	x29, x30, [sp, #-16]!
+100003f64: fd 03 00 91 	mov	x29, sp
+100003f68: e8 27 bf a9 	stp	x8, x9, [sp, #-16]!
+100003f6c: 21 00 80 d2 	mov	x1, #1
+100003f70: 1f 00 01 eb 	cmp	x0, x1
+100003f74: 4d 00 00 54 	b.le	0x100003f7c &lt;_fib+0x1c&gt;
+100003f78: 02 00 00 14 	b	0x100003f80 &lt;_fib+0x20&gt;
+100003f7c: 0c 00 00 14 	b	0x100003fac &lt;_fib+0x4c&gt;
+100003f80: e9 03 00 aa 	mov	x9, x0
+100003f84: 01 00 00 14 	b	0x100003f88 &lt;_fib+0x28&gt;
+100003f88: 20 00 80 d2 	mov	x0, #1
+100003f8c: 20 01 00 cb 	sub	x0, x9, x0
+100003f90: f4 ff ff 97 	bl	0x100003f60 &lt;_fib&gt;
+100003f94: e8 03 00 aa 	mov	x8, x0
+100003f98: 40 00 80 d2 	mov	x0, #2
+100003f9c: 20 01 00 cb 	sub	x0, x9, x0
+100003fa0: f0 ff ff 97 	bl	0x100003f60 &lt;_fib&gt;
+100003fa4: 00 01 00 8b 	add	x0, x8, x0
+100003fa8: 01 00 00 14 	b	0x100003fac &lt;_fib+0x4c&gt;
+100003fac: e8 27 c1 a8 	ldp	x8, x9, [sp], #16
+100003fb0: fd 7b c1 a8 	ldp	x29, x30, [sp], #16
+100003fb4: c0 03 5f d6 	ret
+</code></pre><p>It&rsquo;s funny; it&rsquo;s not much worse than the clang output of the same program written in C.</p><pre tabindex=0><code>0000000100003f5c &lt;_fib&gt;:
+100003f5c: f4 4f be a9 	stp	x20, x19, [sp, #-32]!
+100003f60: fd 7b 01 a9 	stp	x29, x30, [sp, #16]
+100003f64: fd 43 00 91 	add	x29, sp, #16
+100003f68: 1f 08 00 71 	cmp	w0, #2
+100003f6c: 6a 00 00 54 	b.ge	0x100003f78 &lt;_fib+0x1c&gt;
+100003f70: 13 00 80 52 	mov	w19, #0
+100003f74: 0b 00 00 14 	b	0x100003fa0 &lt;_fib+0x44&gt;
+100003f78: 13 00 80 52 	mov	w19, #0
+100003f7c: f4 03 00 aa 	mov	x20, x0
+100003f80: 80 06 00 51 	sub	w0, w20, #1
+100003f84: f6 ff ff 97 	bl	0x100003f5c &lt;_fib&gt;
+100003f88: e8 03 00 aa 	mov	x8, x0
+100003f8c: 80 0a 00 51 	sub	w0, w20, #2
+100003f90: 13 01 13 0b 	add	w19, w8, w19
+100003f94: 9f 0e 00 71 	cmp	w20, #3
+100003f98: f4 03 00 aa 	mov	x20, x0
+100003f9c: 2c ff ff 54 	b.gt	0x100003f80 &lt;_fib+0x24&gt;
+100003fa0: 00 00 13 0b 	add	w0, w0, w19
+100003fa4: fd 7b 41 a9 	ldp	x29, x30, [sp, #16]
+100003fa8: f4 4f c2 a8 	ldp	x20, x19, [sp], #32
+100003fac: c0 03 5f d6 	ret
+</code></pre><p>Clang unwinded the recursive tail call, but it uses the same 32 bytes of the stack, and the code size is only one instruction shorter.</p><p><a href=https://github.com/slowlang/slow/commit/ae712d5b363cdfd950cf4526e284f1973ecc48ed>commit</a></p></main></div><footer id=footer class="mt-auto text-center text-muted"><div class=container>Made with <a href=https://gohugo.io/>Hugo</a> & <a href=https://github.com/zwbetz-gh/vanilla-bootstrap-hugo-theme>Vanilla</a></div></footer><script src=https://slowlang.github.io/blog/js/feather.min.js></script>
+<script>feather.replace()</script><link rel=stylesheet href=https://cdn.jsdelivr.net/npm/katex@0.11.1/dist/katex.min.css integrity=sha384-zB1R0rpPzHqg7Kpt0Aljp8JPLqbXI3bhnPWROx27a9N0Ll6ZP/+DiW/UqRcLbRjq crossorigin=anonymous><script defer src=https://cdn.jsdelivr.net/npm/katex@0.11.1/dist/katex.min.js integrity=sha384-y23I5Q6l+B6vatafAwxRu/0oK/79VlbSz7Q9aiSZUvyWYIYsd+qj+o24G5ZU2zJz crossorigin=anonymous></script>
+<script defer src=https://cdn.jsdelivr.net/npm/katex@0.11.1/dist/contrib/auto-render.min.js integrity=sha384-kWPLUVMOks5AQFrykwIup5lo0m3iMkkHrD0uJ4H5cjeGihAutqP0yW0J6dpFiVkI crossorigin=anonymous onload=renderMathInElement(document.body)></script></body></html>
