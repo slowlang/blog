@@ -1,44 +1,38 @@
 baseURL: https://slowlang.github.io/blog/
 languageCode: en-us
 title: Slow Progress Blog
-theme: vanilla-bootstrap-hugo-theme
+theme: PaperMod
 googleAnalytics: G-PVB527HBWT
 
-taxonomies:
-  tag: tags
-
-permalinks:
-  post: /:filename/
-
-menu:
-  nav:
-  - name: Home
-    url: /
-    weight: 1
-  - name: Blog
-    url: /posts/
-    weight: 2
-  - name: Tags
-    url: /tags/
-    weight: 3
-  - name: Github
-    url: https://github.com/slowlang/slow
-    weight: 4
-  - name: About
-    pre: smile
-    url: /about/
-    weight: 5
-  - name: RSS
-    pre: rss
-    url: /index.xml
-    weight: 6
+minify:
+  disableXML: true
+  minifyOutput: true
 
 params:
-  includeBootstrapJs: false
-  showActiveNav: true
-  containerMaxWidth: 700px
-  dateFormat: Jan 2, 2006
-  homeText: Welcome to the slow lang blog.
-  footerText: Made with [Hugo](https://gohugo.io/) & [Vanilla](https://github.com/zwbetz-gh/vanilla-bootstrap-hugo-theme)
-  hideFooter: false
-  katex: true
+  env: production
+  title: Slow Blog
+  description: "Slow lang development blog"
+  keywords: [Blog, Slowlang, slow, "programming language"]
+  author: nikandfor
+
+  ShowReadingTime: true
+  ShowShareButtons: true
+  ShowPostNavLinks: true
+  ShowBreadCrumbs: true
+  ShowCodeCopyButtons: false
+  ShowWordCount: true
+  ShowRssButtonInSectionTermList: true
+  UseHugoToc: true
+  disableSpecial1stPost: false
+  disableScrollToTop: false
+  comments: false
+  hidemeta: false
+  hideSummary: false
+  showtoc: false
+  tocopen: false
+
+  label:
+    text: "Home"
+
+  analytics:
+    google: {}
