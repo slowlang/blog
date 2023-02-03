@@ -1,0 +1,46 @@
+baseURL: https://slowlang.github.io/blog/
+languageCode: en-us
+title: Slow Progress Blog
+theme: vanilla-bootstrap-hugo-theme
+
+taxonomies:
+  tag: tags
+
+permalinks:
+  post: /:filename/
+
+menu:
+  nav:
+  - name: Home
+    #pre: home
+    url: /
+    weight: 1
+  - name: Blog
+    #pre: edit
+    url: /posts/
+    weight: 2
+  - name: Tags
+    #pre: tag
+    url: /tags/
+    weight: 3
+  - name: Github
+    url: https://github.com/slowlang/slow
+    weight: 4
+  - name: About
+    pre: smile
+    url: /about/
+    weight: 5
+  - name: RSS
+    pre: rss
+    url: /index.xml
+    weight: 6
+
+params:
+  includeBootstrapJs: false
+  showActiveNav: true
+  containerMaxWidth: 700px
+  dateFormat: Jan 2, 2006
+  homeText: Welcome to the slow lang blog.
+  footerText: Made with [Hugo](https://gohugo.io/) & [Vanilla](https://github.com/zwbetz-gh/vanilla-bootstrap-hugo-theme)
+  hideFooter: false
+  katex: true
