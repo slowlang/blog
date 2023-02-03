@@ -2,6 +2,7 @@ baseURL: https://slowlang.github.io/blog/
 languageCode: en-us
 title: Slow Progress Blog
 theme: vanilla-bootstrap-hugo-theme
+googleAnalytics: G-PVB527HBWT
 
 taxonomies:
   tag: tags
